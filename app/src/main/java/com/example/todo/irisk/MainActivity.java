@@ -34,15 +34,20 @@ import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.TextView;
 
 
 public class MainActivity extends AppCompatActivity implements CvCameraViewListener2 {
     static{ System.loadLibrary("opencv_java3");}
     private static final String TAG = "OCVSample::Activity";
     public static final int JAVA_DETECTOR = 0;
-
+    private int frames;
     private Mat mRgba;
+    private int burstLength = 100;
     private Mat mGray;
+    private boolean capturing = true;
+    public TextView myTextView;
 
     private CascadeClassifier mJavaDetectorLeftEye;
 
@@ -50,7 +55,7 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
 
     double xCenter = -1;
     double yCenter = -1;
-
+    private double dilationPerFrame = 0.0;
     private Mat mIntermediateMat;
     private Mat hierarchy;
 
@@ -89,11 +94,20 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        System.out.println("HEYYYYYYYYYYYYYYYYYYYYY");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
+        Button button = findViewById(R.id.capture);
+        button.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                capturing = true;
+                frames = 0;
+            }
+        });
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.HelloOpenCvView);
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
+        myTextView = findViewById(R.id.dilationPerFrame);
     }
 
     @Override
@@ -147,18 +161,56 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
 
     @Override
     public void onCameraViewStarted(int width, int height) {
+        frames = 0;
 
     }
 
     @Override
     public void onCameraViewStopped() {
 
+
     }
 
     @Override
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
+        frames = frames + 1;
+        if(capturing && frames == burstLength+1){
+            capturing = false;
+        }
+        if(capturing){
+
+            mRgba = inputFrame.rgba();
+            mGray = inputFrame.gray();
+            if (mZoomWindow == null)
+                createAuxiliaryMats();
+            Rect area = new Rect(new Point(20, 20), new Point(mGray.width() - 20, mGray.height() - 20));
+            detectEye(mJavaDetectorLeftEye, area, 100);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    myTextView.setText(Double.toString(dilationPerFrame));
+                }
+            });
+        }
         return inputFrame.rgba();
     }
+
+    private void createAuxiliaryMats() {
+        if (mGray.empty())
+            return;
+
+        int rows = mGray.rows();
+        int cols = mGray.cols();
+
+        if (mZoomWindow == null) {
+            mZoomWindow = mRgba.submat(rows / 2 + rows / 10, rows, cols / 2 + cols / 10, cols);
+        }
+
+
+
+    }
+
+
     private Mat detectEye(CascadeClassifier clasificator, Rect area, int size) {
         Mat template = new Mat();
         Mat mROI = mGray.submat(area);
@@ -218,7 +270,10 @@ public class MainActivity extends AppCompatActivity implements CvCameraViewListe
 
                 if (vCircle == null)
                     break;
-                int radius = (int) Math.round(vCircle[2]);
+                double radius = vCircle[2];
+                System.out.println(radius);
+                System.out.println("HEYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY");
+                dilationPerFrame = dilationPerFrame + radius;
 
                 // draw the found circle
             }
